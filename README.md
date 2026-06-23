@@ -31,7 +31,7 @@ Key features:
 ## TODO
 
 - [x] **Inference** — run EgoSim-14B on Egodex and EgoVid datasets.
-- [ ] **Continuous simulation** — multi-clip incremental generation with an updatable 3D scene state. Coming soon.
+- [x] **Continuous simulation** — multi-clip incremental generation with an updatable 3D scene state; see [**`continuous_simulation/README.md`**](continuous_simulation/README.md).
 - [x] **Data preparation** — annotate raw egocentric videos to produce inference-ready assets; see [**`data_process/README.md`**](data_process/README.md).
 - [ ] **Training** — coming soon.
 
@@ -147,6 +147,10 @@ Key options:
 | `--fps` | 16 | Output FPS |
 | `--max_samples` | — | Limit number of samples (useful for testing) |
 | `--skip_existing` | — | Skip already-generated videos |
+
+## Continuous simulation
+
+Multi-clip incremental generation with updatable 3D scene state lives in [`continuous_simulation/`](continuous_simulation/README.md). After installing the main project, follow that README to set up the scene environment and run `recon_visualize` or `full` modes.
 
 ## Acknowledgements
 
