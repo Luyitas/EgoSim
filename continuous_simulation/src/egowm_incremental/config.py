@@ -13,6 +13,8 @@ from .paths import (
     resolve_conda_env_python,
 )
 
+DEFAULT_QWEN_VL_ROOT = "../artifacts/models/qwen-vl/Qwen3-VL-4B-Instruct"
+
 
 @dataclass
 class PythonEnvConfig:
@@ -176,7 +178,10 @@ def load_project_config(config_path: str | Path) -> ProjectConfig:
                 models_raw.get("model_root", "../EgoSim-14B"),
                 base_dir=PROJECT_ROOT,
             ),
-            qwen_vl_root=expand_path(models_raw.get("qwen_vl_root"), base_dir=config_dir),
+            qwen_vl_root=expand_path(
+                models_raw.get("qwen_vl_root") or DEFAULT_QWEN_VL_ROOT,
+                base_dir=config_dir,
+            ),
             prior_depth_root=expand_path(
                 models_raw.get("prior_depth_root", "../artifacts/models/priorda"),
                 base_dir=config_dir,

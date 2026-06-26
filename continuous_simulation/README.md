@@ -20,31 +20,51 @@ cd continuous_simulation
 
 Install the main EgoSim project first by following its `Installation` section. This provides the Python environment used for per-clip EgoSim generation.
 
+**SAM3** and **Depth-Anything-3** are third-party dependencies and are **not** shipped in this repository. Clone them into the paths below before running the scene setup script (from `continuous_simulation/`):
+
+```bash
+git clone https://github.com/facebookresearch/sam3.git \
+  scene_backend/egosim_state/sam3
+
+git clone https://github.com/ByteDance-Seed/Depth-Anything-3.git \
+  scene_backend/egosim_state/Depth-Anything-3
+```
+
 Then create the scene reconstruction environment for incremental inference:
 
 ```bash
+cp configs/project.yaml.example configs/project.yaml
 bash scripts/setup_envs.sh
 ```
 
-The setup script creates `egosim-scene`, which runs EgoSim-state reconstruction, phrase prediction, and updatable 3D scene state rendering.
+The setup script builds wheels for SAM3 and Depth-Anything-3, installs them into `egosim-scene`, and verifies imports. It creates `egosim-scene`, which runs EgoSim-state reconstruction, phrase prediction, and updatable 3D scene state rendering.
 
-This subproject lives inside the `egosim-opensource/` checkout. The launcher imports standard EgoSim inference code from that repo root (`../` relative to `continuous_simulation/`).
+Expected layout after cloning:
+
+```text
+continuous_simulation/scene_backend/egosim_state/
+├── sam3/                  # git clone facebookresearch/sam3
+├── Depth-Anything-3/      # git clone ByteDance-Seed/Depth-Anything-3
+└── ...                    # bundled egosim_state backend (in repo)
+```
+
+This subproject lives inside the main **EgoSim** repository. The launcher imports standard EgoSim inference code from the repo root (`../` relative to `continuous_simulation/`).
 
 ## Model weights
 
-Download weights from the **egosim-opensource** repo root:
+Download weights from the **EgoSim** repo root:
 
 ```bash
-cd egosim-opensource
+cd ..   # EgoSim repository root (parent of continuous_simulation/)
 
 # Scene reconstruction weights (required for recon_visualize / full)
 bash continuous_simulation/scripts/download_scene_weights.sh
 
-# EgoSim-14B (required for generation; same path as single-clip inference)
-huggingface-cli download your-org/EgoSim-14B --local-dir ./EgoSim-14B
+# EgoSim-14B (required for generation; same as single-clip inference in ../README.md)
+huggingface-cli download wuzhi-hao/EgoSim --local-dir ./EgoSim-14B
 ```
 
-Expected `EgoSim-14B/` layout (at `egosim-opensource/EgoSim-14B/`):
+Expected `EgoSim-14B/` layout (at `EgoSim/EgoSim-14B/`):
 
 ```text
 EgoSim-14B/
@@ -55,14 +75,21 @@ EgoSim-14B/
 └── google/umt5-xxl/
 ```
 
-`continuous_simulation/configs/project.yaml` points at this directory via `models.model_root: ../EgoSim-14B` (relative to `continuous_simulation/`).
+Copy `configs/project.yaml.example` to `configs/project.yaml`; it points at this directory via `models.model_root: ../EgoSim-14B` (relative to `continuous_simulation/`).
 
-Optional flags: `--with-qwen`, `--with-alternate`, `--with-aot`, `--all`. Run `bash continuous_simulation/scripts/download_scene_weights.sh --help` for details.
+Phrase prediction with **Qwen3-VL-4B-Instruct** is enabled by default. After copying `configs/project.yaml.example` to `configs/project.yaml`, set `models.qwen_vl_root` if needed (default: `../artifacts/models/qwen-vl/Qwen3-VL-4B-Instruct`) and download the weights when ready:
+
+```bash
+bash continuous_simulation/scripts/download_scene_weights.sh --with-qwen
+```
+
+Optional flags: `--with-alternate`, `--with-aot`, `--all`. Run `bash continuous_simulation/scripts/download_scene_weights.sh --help` for details.
 
 Expected layout:
 
 ```text
-egosim-opensource/
+EgoSim/                          # repository root
+├── continuous_simulation/
 ├── EgoSim-14B/
 └── artifacts/models/
     ├── priorda/
@@ -71,13 +98,28 @@ egosim-opensource/
     ├── groundingdino/
     ├── bert-base-uncased/
     ├── aot/
-    ├── qwen-vl/                 # optional phrase prediction
+    ├── qwen-vl/                 # Qwen3-VL phrase prediction (enabled by default)
     ├── unidepth-v2-vitl14/      # alternate scene pipelines only
     ├── video-depth-anything/    # alternate scene pipelines only
     └── moge-2-vitl-normal/      # alternate scene pipelines only
 ```
 
-`configs/project.yaml` already points at the default paths. See `docs/models.md` for per-model details.
+After `cp configs/project.yaml.example configs/project.yaml`, paths already point at the defaults above. See the main [`README.md`](../README.md#model-weights) for **EgoSim-14B** download details.
+
+## Mini sample (quicktest data)
+
+Git ships only `metadata.csv`. Download the 2-clip test assets ([Google Drive](https://drive.google.com/drive/folders/1a0ssi752vgqiPCovNknLoqbdBqcz1emY?usp=drive_link)), extract the `14/` folder into `tests/samples/mini_sample/continuous_generation/`, then run:
+
+```bash
+cd tests/samples/mini_sample/continuous_generation
+mkdir -p process_result/test_3dmem/add_remove_lid/14
+cd process_result/test_3dmem/add_remove_lid/14
+ln -sf ../../../../14/0_60 0_60
+ln -sf ../../../../14/60_120 60_120
+ln -sf ../../../../14/14_0_120.hdf5 14_0_120.hdf5
+```
+
+Paths above are relative to the **EgoSim** repository root. Copy `configs/project.yaml.example` to `configs/project.yaml` before running quicktest.
 
 ## Data preparation
 
@@ -102,15 +144,16 @@ test_3dmem/add_remove_lid/GT_14_0_60.mp4
 test_3dmem/add_remove_lid/GT_14_60_120.mp4
 ```
 
-Clips with the same task and source video id are grouped and processed in temporal order. See `../tests/samples/mini_sample/continuous_generation/metadata.csv` for an example.
+Clips with the same task and source video id are grouped and processed in temporal order. See [`../tests/samples/mini_sample/continuous_generation/metadata.csv`](../tests/samples/mini_sample/continuous_generation/metadata.csv) for the bundled example (after downloading the mini sample above).
 
-The default config expects the continuous generation mini-sample **dataset root** at:
+The default config sets:
 
 ```text
-../tests/samples/mini_sample/continuous_generation/process_result/
+data.dataset_root: ../../tests/samples/mini_sample/continuous_generation
+data.metadata_path: ../../tests/samples/mini_sample/continuous_generation/metadata.csv
 ```
 
-with `metadata.csv` next to it at `../tests/samples/mini_sample/continuous_generation/metadata.csv`. Paths in the CSV may omit the legacy `process_result/` prefix when `data.dataset_root` already points at that folder; older rows that still include `process_result/...` are also accepted.
+Paths in the CSV may include a `process_result/` prefix; the loader resolves them against `dataset_root` automatically.
 
 ## Inference
 
@@ -120,7 +163,13 @@ All commands below assume you are inside this repo:
 cd continuous_simulation
 ```
 
-This repository ships a default config at `configs/project.yaml`. With the standard layout, no manual config edit is needed.
+This repository ships `configs/project.yaml.example`. Copy it to `configs/project.yaml` before running (paths are relative to `continuous_simulation/`):
+
+```bash
+cp configs/project.yaml.example configs/project.yaml
+```
+
+With the standard layout, no further config edit is needed.
 
 Run a reconstruction visualization smoke test:
 
@@ -138,18 +187,23 @@ PYTHONPATH=src python -m egowm_incremental.cli run-incremental \
   --mode full
 ```
 
-The resolved backend command can be printed without running inference:
-
-```bash
-PYTHONPATH=src python -m egowm_incremental.cli print-command \
-  --config configs/project.yaml \
-  --mode full
-```
-
 Available modes:
 
 - `recon_visualize` - generate the first clip, run scene reconstruction, and optionally open/write visualization outputs.
 - `full` - run the multi-clip incremental pipeline with updatable 3D scene state updates.
+
+## Acknowledgements
+
+The updatable scene-state backend is adapted from NVIDIA's [ViPE](https://github.com/nv-tlabs/vipe) (Video Pose Engine). It also relies on:
+
+- [SAM 3](https://github.com/facebookresearch/sam3) — open-vocabulary segmentation
+- [Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3) — multi-view depth and pose
+- [DROID-SLAM](https://github.com/cvg/DROID-SLAM) — visual SLAM
+- [GroundingDINO](https://github.com/IDEA-Research/GroundingDINO) — text-guided detection
+- [Prior Depth Anything](https://github.com/SpatialVision/Prior-Depth-Anything) — depth prior fusion
+- [GeoCalib](https://github.com/cvg/GeoCalib) — camera intrinsics estimation
+- [Segment-and-Track-Anything](https://github.com/z-x-yang/Segment-and-Track-Anything) — instance tracking (DeAOT)
+- [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL) — phrase prediction for scene segmentation (optional)
 
 ## License
 

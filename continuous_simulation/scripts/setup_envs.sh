@@ -14,6 +14,10 @@ SCENE_TORCHVISION_VERSION="${SCENE_TORCHVISION_VERSION:-0.22.0+cu128}"
 SCENE_TORCH_INDEX_URL="${SCENE_TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
 BUILD_TORCH_CUDA_ARCH_LIST="${BUILD_TORCH_CUDA_ARCH_LIST:-9.0}"
 SCENE_BACKEND_EGOSIM_STATE_ROOT="${PROJECT_ROOT}/scene_backend/egosim_state"
+SCENE_DEP_SAM3_DIR="${SCENE_BACKEND_EGOSIM_STATE_ROOT}/sam3"
+SCENE_DEP_DA3_DIR="${SCENE_BACKEND_EGOSIM_STATE_ROOT}/Depth-Anything-3"
+SAM3_REPO_URL="${SAM3_REPO_URL:-https://github.com/facebookresearch/sam3.git}"
+DA3_REPO_URL="${DA3_REPO_URL:-https://github.com/ByteDance-Seed/Depth-Anything-3.git}"
 TEMP_CONDARC=""
 
 if ! command -v conda >/dev/null 2>&1; then
@@ -77,7 +81,7 @@ create_env_from_yaml() {
   local env_name="$1"
   local yaml_path="$2"
 
-  if conda env list | awk '{print $1}' | rg -x "${env_name}" >/dev/null 2>&1; then
+  if conda env list | awk '{print $1}' | grep -qx "${env_name}"; then
     run_conda env update -n "${env_name}" -f "${yaml_path}" --prune
   else
     run_conda env create -n "${env_name}" -f "${yaml_path}"
@@ -87,10 +91,39 @@ create_env_from_yaml() {
 create_env_from_lock() {
   local env_name="$1"
   local lock_path="$2"
-  if conda env list | awk '{print $1}' | rg -x "${env_name}" >/dev/null 2>&1; then
+  if conda env list | awk '{print $1}' | grep -qx "${env_name}"; then
     conda remove -y -n "${env_name}" --all
   fi
   run_conda create -y -n "${env_name}" --file "${lock_path}"
+}
+
+require_user_cloned_scene_dependency() {
+  local dir="$1"
+  local label="$2"
+  local repo_url="$3"
+
+  if [[ -d "${dir}" && -f "${dir}/pyproject.toml" ]]; then
+    return 0
+  fi
+
+  cat <<EOF
+
+ERROR: ${label} source tree not found at:
+  ${dir}
+
+This dependency is not bundled with EgoSim. Clone it to the path above, then re-run setup:
+
+  git clone ${repo_url} "${dir}"
+
+See continuous_simulation/README.md (Installation) for details.
+
+EOF
+  exit 1
+}
+
+require_user_cloned_scene_dependencies() {
+  require_user_cloned_scene_dependency "${SCENE_DEP_SAM3_DIR}" "SAM3" "${SAM3_REPO_URL}"
+  require_user_cloned_scene_dependency "${SCENE_DEP_DA3_DIR}" "Depth-Anything-3" "${DA3_REPO_URL}"
 }
 
 build_and_install_local_package() {
@@ -98,6 +131,10 @@ build_and_install_local_package() {
   local package_dir="$2"
   if [[ ! -d "${package_dir}" ]]; then
     echo "ERROR: local package directory not found: ${package_dir}"
+    exit 1
+  fi
+  if [[ ! -f "${package_dir}/pyproject.toml" ]]; then
+    echo "ERROR: ${package_dir} does not look like a Python package (missing pyproject.toml)."
     exit 1
   fi
 
@@ -174,6 +211,7 @@ modules = [
     "sam3.model_builder",
     "depth_anything_3.api",
     "egosim_state.pipeline.default",
+    "transformers.models.qwen3_vl",
 ]
 
 failures = []
@@ -192,6 +230,8 @@ print("Verified scene runtime imports for egosim_state, sam3, and Depth-Anything
 PY
 }
 
+require_user_cloned_scene_dependencies
+
 if [[ "${USE_LOCKS}" == "1" ]]; then
   create_env_from_lock "${SCENE_ENV_NAME}" "${PROJECT_ROOT}/envs/locks/scene-linux-64.lock"
 else
@@ -205,9 +245,9 @@ install_scene_backend_requirements
 conda run -n "${SCENE_ENV_NAME}" pip install -e "${PROJECT_ROOT}"
 verify_scene_torch_cuda
 
-build_and_install_local_package "${SCENE_ENV_NAME}" "${SCENE_BACKEND_EGOSIM_STATE_ROOT}/sam3"
+build_and_install_local_package "${SCENE_ENV_NAME}" "${SCENE_DEP_SAM3_DIR}"
 verify_scene_torch_cuda
-build_and_install_local_package "${SCENE_ENV_NAME}" "${SCENE_BACKEND_EGOSIM_STATE_ROOT}/Depth-Anything-3"
+build_and_install_local_package "${SCENE_ENV_NAME}" "${SCENE_DEP_DA3_DIR}"
 verify_scene_torch_cuda
 if [[ "${INSTALL_MOGE}" == "1" ]]; then
   build_and_install_local_package "${SCENE_ENV_NAME}" "${SCENE_BACKEND_EGOSIM_STATE_ROOT}/MoGe"

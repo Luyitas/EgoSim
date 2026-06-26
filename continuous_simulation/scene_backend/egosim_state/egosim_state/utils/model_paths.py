@@ -15,7 +15,7 @@ def repo_path(*parts: str) -> Path:
 
 
 def artifacts_models_root() -> Path:
-    """Default weight root: egosim-opensource/artifacts/models/."""
+    """Default weight root: EgoSim/artifacts/models/."""
     return EGOSIM_STATE_REPO_ROOT.parents[2] / "artifacts" / "models"
 
 

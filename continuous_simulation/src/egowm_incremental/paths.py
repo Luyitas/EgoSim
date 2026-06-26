@@ -8,9 +8,10 @@ from pathlib import Path
 PACKAGE_ROOT = Path(__file__).resolve().parent
 SRC_ROOT = PACKAGE_ROOT.parent
 PROJECT_ROOT = SRC_ROOT.parent
-EGOSIM_OPENSOURCE_ROOT = PROJECT_ROOT.parent
-# Backward-compatible alias used by older path helpers.
-WANVIDEO_ROOT = EGOSIM_OPENSOURCE_ROOT
+EGOSIM_ROOT = PROJECT_ROOT.parent
+# Backward-compatible aliases used by older path helpers.
+EGOSIM_OPENSOURCE_ROOT = EGOSIM_ROOT
+WANVIDEO_ROOT = EGOSIM_ROOT
 
 _STANDARD_EGOWM_RUNNER = Path("egowm") / "inference" / "runner.py"
 
@@ -19,16 +20,20 @@ def get_project_root() -> Path:
     return PROJECT_ROOT
 
 
+def get_egosim_root() -> Path:
+    return EGOSIM_ROOT
+
+
 def get_egosim_opensource_root() -> Path:
-    return EGOSIM_OPENSOURCE_ROOT
+    return EGOSIM_ROOT
 
 
 def get_wanvideo_root() -> Path:
     return WANVIDEO_ROOT
 
 
-def resolve_egosim_opensource_root(explicit: str | Path | None = None) -> Path | None:
-    """Resolve the egosim-opensource repo root used for standard EgoSim imports."""
+def resolve_egosim_root(explicit: str | Path | None = None) -> Path | None:
+    """Resolve the EgoSim repository root used for standard EgoSim imports."""
     if explicit not in (None, ""):
         root = Path(explicit).expanduser().resolve()
     else:
@@ -36,12 +41,15 @@ def resolve_egosim_opensource_root(explicit: str | Path | None = None) -> Path |
         root = (
             Path(env_raw).expanduser().resolve()
             if env_raw
-            else EGOSIM_OPENSOURCE_ROOT.resolve()
+            else EGOSIM_ROOT.resolve()
         )
 
     if (root / _STANDARD_EGOWM_RUNNER).exists():
         return root
     return None
+
+
+resolve_egosim_opensource_root = resolve_egosim_root
 
 
 def expand_path(raw_path: str | None, *, base_dir: Path) -> Path | None:

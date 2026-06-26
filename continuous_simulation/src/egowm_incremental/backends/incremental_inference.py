@@ -76,6 +76,25 @@ def load_standard_pipeline(model_root: str, device: torch.device):
     return _load_pipeline(model_root, device=str(device))
 
 
+def release_standard_pipeline_gpu(pipe, device: torch.device):
+    """Free GPU memory held by the EgoWM pipeline before scene reconstruction."""
+    if pipe is None:
+        return None
+    logger.info("  Releasing EgoWM pipeline GPU memory for scene reconstruction ...")
+    for attr in ("dit", "vae", "text_encoder", "image_encoder"):
+        module = getattr(pipe, attr, None)
+        if module is not None:
+            try:
+                module.to("cpu")
+            except Exception as exc:
+                logger.warning(f"  Failed to move pipeline.{attr} to CPU: {exc}")
+    del pipe
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    return None
+
+
 def _standard_inference_api():
     from egowm.inference.encoders import encode_ego_prior, encode_first_frame, encode_prompt
     from egowm.inference.runner import load_mask_video as standard_load_mask_video
@@ -834,6 +853,11 @@ def process_clip_group(
 
             # ---- Prepare inputs + inference + phrases (skip when video already exists) ----
             if not _skip_generation:
+                if pipe is None:
+                    logger.info("  Lazy-loading standard EgoWM pipeline for generation ...")
+                    pipe = load_standard_pipeline(args.model_root, device)
+                    logger.info("  Pipeline loaded.")
+
                 (
                     standard_encode_ego_prior,
                     standard_encode_first_frame,
@@ -1071,6 +1095,9 @@ def process_clip_group(
                     if getattr(args, "incremental_mode", "continue_generate") == "recon_visualize":
                         _use_viser = not getattr(args, "no_recon_viser", False)
 
+                    if not args.egosim_state_only:
+                        pipe = release_standard_pipeline_gpu(pipe, device)
+
                     egosim_state_result = run_egosim_state_subprocess(
                         generated_video=str(out_video_path),
                         hdf5_path=str(hdf5_path) if has_hdf5 else "",
@@ -1183,7 +1210,7 @@ def process_clip_group(
         shutil.copy2(memory_path, final_path)
         logger.info(f"  Saved final memory: {final_path}")
 
-    return summary
+    return summary, pipe
 
 
 # ======================================================================
@@ -1209,7 +1236,7 @@ def parse_args():
                         help="Path to eval_set.txt for egovid, matching the standard runner")
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--egowm_root", type=str, default=None,
-                        help="Path to egosim-opensource (default: ../ from continuous_simulation/)")
+                        help="Path to EgoSim repo root (default: ../ from continuous_simulation/)")
     parser.add_argument("--part_prefix", type=str, default="test_16fps_720p",
                         help="Subdirectory prefix for videos/HDF5 in dataset_root")
 
@@ -1367,6 +1394,8 @@ def main():
         args.run_egosim_state = False
     if args.no_predict_phrases:
         args.predict_phrases = False
+    elif args.qwen_model_path and not args.predict_phrases:
+        args.predict_phrases = True
     if args.predict_phrases and has_custom_scene_phrases(args.scene_phrases):
         logger.info("Custom scene phrases detected; disabling predict_phrases and using manual phrases instead.")
         args.predict_phrases = False
@@ -1435,7 +1464,7 @@ def main():
             f"{'='*60}"
         )
 
-        summary = process_clip_group(
+        summary, pipe = process_clip_group(
             group_key=group_key,
             clips=clips,
             pipe=pipe,

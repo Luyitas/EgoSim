@@ -1,5 +1,5 @@
 runtime:
-  # Quicktest runs: <timestamp subdir>/task/video_id/*.mp4 under egosim-opensource/output/continuous_generation/
+  # Quicktest runs: <timestamp subdir>/task/video_id/*.mp4 under EgoSim/output/continuous_generation/
   output_root: ../../output/continuous_generation
   gpu_id: 0
   offline: true
@@ -16,7 +16,7 @@ runtime:
 
 models:
   model_root: ../EgoSim-14B
-  qwen_vl_root: ""
+  qwen_vl_root: ../artifacts/models/qwen-vl/Qwen3-VL-4B-Instruct
   prior_depth_root: ../artifacts/models/priorda
 
 data:

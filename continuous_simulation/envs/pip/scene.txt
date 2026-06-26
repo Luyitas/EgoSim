@@ -13,4 +13,7 @@ pycocotools
 addict
 evo
 
+# Qwen3-VL phrase prediction.
+qwen-vl-utils>=0.0.8
+
 # The modified scene backend is installed from scene_backend/egosim_state by scripts/setup_envs.sh.

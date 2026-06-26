@@ -969,6 +969,68 @@ def load_gt_pointcloud(process_result_dir, hdf5_path):
     return points_world.astype(np.float32), colors, intrinsics, original_size
 
 
+def load_intrinsics_from_hdf5(hdf5_path):
+    """Load camera intrinsics from EgoDex-style HDF5 when pointcloud.npz is absent."""
+    hdf5_path = Path(hdf5_path)
+    if not hdf5_path.exists():
+        return None, None
+    with h5py.File(hdf5_path, "r") as f:
+        if "camera" not in f or "intrinsic" not in f["camera"]:
+            return None, None
+        intrinsics = np.asarray(f["camera"]["intrinsic"], dtype=np.float32)
+    if intrinsics.shape != (3, 3):
+        return None, None
+    original_size = np.array([1280, 720], dtype=np.int32)
+    return intrinsics, original_size
+
+
+def load_intrinsics_from_scene_artifact(artifact):
+    """Load pinhole intrinsics from EgoSim state scene artifacts."""
+    if artifact is None or not artifact.intrinsics_path.exists():
+        return None, None
+    from egosim_state.utils.io import read_intrinsics_artifacts
+
+    _, intr_seq, _ = read_intrinsics_artifacts(
+        artifact.intrinsics_path, artifact.camera_type_path
+    )
+    fx, fy, cx, cy = intr_seq[0].numpy()
+    intrinsics = np.array(
+        [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]],
+        dtype=np.float32,
+    )
+    if not artifact.rgb_path.exists():
+        original_size = np.array([WIDTH, HEIGHT], dtype=np.int32)
+        return intrinsics, original_size
+    frame = imageio.imread(str(artifact.rgb_path), index=0)
+    original_size = np.array([frame.shape[1], frame.shape[0]], dtype=np.int32)
+    return intrinsics, original_size
+
+
+def resolve_render_intrinsics(
+    *,
+    gt_intrinsics,
+    gt_original_size,
+    hdf5_path,
+    process_result_dir,
+    scene_artifact=None,
+):
+    if gt_intrinsics is not None:
+        return gt_intrinsics, gt_original_size
+
+    if process_result_dir and hdf5_path:
+        try:
+            _, _, intrinsics, original_size = load_gt_pointcloud(process_result_dir, hdf5_path)
+            return intrinsics, original_size
+        except (FileNotFoundError, Exception):
+            pass
+
+    intrinsics, original_size = load_intrinsics_from_hdf5(hdf5_path)
+    if intrinsics is not None:
+        return intrinsics, original_size
+
+    return load_intrinsics_from_scene_artifact(scene_artifact)
+
+
 def load_gt_camera_transforms(hdf5_path):
     with h5py.File(hdf5_path, "r") as f:
         poses = np.asarray(f["transforms"]["camera"])
@@ -1617,7 +1679,7 @@ def render_memory_to_frames(points_world, colors, camera_transforms, intrinsics,
         logger.info(
             "UI-projected render point_size(px): "
             f"mean={np.mean(projected_point_sizes):.2f}, "
-            f"min={np.min(projected_point_sizes):.2f}, max={np.max(projected_point_sizes):.2f} "
+            f"min={np.min(projected_point_sizes):.2f}, max={np.min(projected_point_sizes):.2f} "
             f"(world={point_world_size})"
         )
 
@@ -2309,17 +2371,19 @@ def main():
                 else:
                     next_camera_transforms = load_gt_camera_transforms(next_hdf5)
 
-                intrinsics = gt_intrinsics
-                original_size = gt_original_size
+                intrinsics, original_size = resolve_render_intrinsics(
+                    gt_intrinsics=gt_intrinsics,
+                    gt_original_size=gt_original_size,
+                    hdf5_path=next_hdf5,
+                    process_result_dir=(
+                        Path(args.next_gt_process_result_dir)
+                        if args.next_gt_process_result_dir
+                        else Path(args.process_result_dir)
+                    ),
+                    scene_artifact=artifact,
+                )
                 if intrinsics is None:
-                    next_pr_dir = Path(args.process_result_dir)
-                    try:
-                        _, _, intrinsics, original_size = load_gt_pointcloud(
-                            next_pr_dir, next_hdf5
-                        )
-                    except FileNotFoundError:
-                        logger.warning("Cannot render: no intrinsics available")
-                        intrinsics = None
+                    logger.warning("Cannot render: no intrinsics available")
 
                 if intrinsics is not None:
                     render_pts = gt_pts if (args.render_gt_pointcloud and len(gt_pts) > 0) else cumulative_points

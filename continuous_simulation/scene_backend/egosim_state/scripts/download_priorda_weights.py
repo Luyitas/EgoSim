@@ -67,7 +67,7 @@ if __name__ == "__main__":
         "--output_dir",
         type=str,
         default="../../../artifacts/models/priorda",
-        help="Directory to save the weights (default: egosim-opensource/artifacts/models/priorda)",
+        help="Directory to save the weights (default: EgoSim/artifacts/models/priorda)",
     )
     parser.add_argument(
         "--model_size",

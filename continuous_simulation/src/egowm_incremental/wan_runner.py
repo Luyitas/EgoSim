@@ -98,7 +98,10 @@ def build_quicktest_command(
             raise ValueError(
                 f"Mode '{mode_spec.name}' requires models.qwen_vl_root in the config."
             )
-        command.extend(["--qwen_model_path", str(config.models.qwen_vl_root)])
+        command.extend([
+            "--predict_phrases",
+            "--qwen_model_path", str(config.models.qwen_vl_root),
+        ])
     else:
         command.append("--no_predict_phrases")
 
